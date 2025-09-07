@@ -1,95 +1,151 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Mail, Users, Inbox, Star, Plus, Search, Filter,
-  RefreshCw, Settings, BarChart3, Clock, Send, Archive,
-  Reply, Forward, Trash, Flag, MoreHorizontal, Paperclip,
-  Calendar, Phone, MapPin, Edit3, X
+  Mail, Users, Inbox, Star, Plus, Search, Filter, RefreshCw, Settings, 
+  BarChart3, Clock, Send, Archive, Reply, Forward, Trash, Flag, 
+  MoreHorizontal, Paperclip, Calendar, Phone, MapPin, Edit3, X, 
+  CheckCircle, AlertCircle, TrendingUp, Activity, FileText, Bell
 } from 'lucide-react';
 
 export default function Dashboard({ user, token, onLogout }) {
   const [activeTab, setActiveTab] = useState('emails');
-  const [emails, setEmails] = useState([]);
-  const [contacts, setContacts] = useState([]);
-  const [stats, setStats] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [isEmailSyncing, setIsEmailSyncing] = useState(false);
-  const [selectedEmail, setSelectedEmail] = useState(null);
-  const [isComposing, setIsComposing] = useState(false);
-  const [composeData, setComposeData] = useState({
-    to: '',
-    subject: '',
-    body: ''
+  const [emails, setEmails] = useState([
+    {
+      id: 1,
+      subject: "Welcome to SuperSync!",
+      sender: { name: "SuperSync Team", email: "team@supersync.com" },
+      body: "Welcome to the fastest email experience ever made. Get ready to process email 2x faster with our intelligent features and keyboard shortcuts. This is just the beginning of your journey to email superhuman status.",
+      isRead: false,
+      isImportant: true,
+      receivedAt: new Date().toISOString(),
+      labels: ["welcome"],
+      hasAttachments: false
+    },
+    {
+      id: 2,
+      subject: "Your first email sync is ready",
+      sender: { name: "Sarah Chen", email: "sarah@supersync.com" },
+      body: "We've successfully synced your emails from your connected accounts. You can now manage all your communications from one powerful interface. Check out the keyboard shortcuts to get started!",
+      isRead: true,
+      isImportant: false,
+      receivedAt: new Date(Date.now() - 3600000).toISOString(),
+      labels: ["sync"],
+      hasAttachments: true
+    },
+    {
+      id: 3,
+      subject: "Team collaboration features are live",
+      sender: { name: "Marcus Rodriguez", email: "marcus@supersync.com" },
+      body: "Great news! Our new team collaboration features are now available. You can now share emails, assign tasks, and collaborate with your team more efficiently than ever before.",
+      isRead: false,
+      isImportant: false,
+      receivedAt: new Date(Date.now() - 7200000).toISOString(),
+      labels: ["product-update"],
+      hasAttachments: false
+    },
+    {
+      id: 4,
+      subject: "Monthly productivity report",
+      sender: { name: "SuperSync Analytics", email: "analytics@supersync.com" },
+      body: "Here's your monthly productivity summary. You've processed 247 emails this month, with an average response time of 1.2 hours. Your productivity has increased by 34% compared to last month!",
+      isRead: true,
+      isImportant: false,
+      receivedAt: new Date(Date.now() - 86400000).toISOString(),
+      labels: ["analytics"],
+      hasAttachments: true
+    }
+  ]);
+  
+  const [contacts, setContacts] = useState([
+    {
+      _id: 1,
+      name: "Sarah Chen",
+      email: "sarah@supersync.com",
+      company: "SuperSync",
+      phone: "+1 (555) 123-4567",
+      notes: "CEO and co-founder. Expert in email productivity and team collaboration.",
+      tags: ["team", "leadership", "founder"],
+      lastContactedAt: new Date(Date.now() - 86400000).toISOString(),
+      isLead: false
+    },
+    {
+      _id: 2,
+      name: "Marcus Rodriguez",
+      email: "marcus@supersync.com", 
+      company: "SuperSync",
+      phone: "+1 (555) 234-5678",
+      notes: "CTO and co-founder. Technical expert in email infrastructure and security.",
+      tags: ["team", "engineering", "founder"],
+      lastContactedAt: new Date(Date.now() - 3600000).toISOString(),
+      isLead: false
+    },
+    {
+      _id: 3,
+      name: "Emily Watson",
+      email: "emily@designcorp.com",
+      company: "DesignCorp",
+      phone: "+1 (555) 345-6789",
+      notes: "Potential client interested in team collaboration features. Follow up next week.",
+      tags: ["prospect", "design", "enterprise"],
+      lastContactedAt: new Date(Date.now() - 172800000).toISOString(),
+      isLead: true
+    },
+    {
+      _id: 4,
+      name: "David Kim",
+      email: "d.kim@techstartup.io",
+      company: "TechStartup",
+      notes: "Former colleague, now at a startup. Interested in our API integrations.",
+      tags: ["network", "api", "startup"],
+      lastContactedAt: new Date(Date.now() - 259200000).toISOString(),
+      isLead: true
+    }
+  ]);
+
+  const [stats, setStats] = useState({
+    emails: 247,
+    unreadEmails: 12,
+    importantEmails: 5,
+    contacts: 45,
+    responseTime: "1.2h",
+    productivity: "+34%"
   });
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  const [selectedEmail, setSelectedEmail] = useState(null);
+  const [isComposing, setIsComposing] = useState(false);
+  const [composeData, setComposeData] = useState({ to: '', subject: '', body: '' });
+  const [isEmailSyncing, setIsEmailSyncing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [emailFilter, setEmailFilter] = useState('all');
 
-  const fetchDashboardData = async () => {
-    try {
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
-
-      const [emailsRes, contactsRes, statsRes] = await Promise.all([
-        fetch('/api/emails', { headers }),
-        fetch('/api/contacts', { headers }),
-        fetch('/api/dashboard/stats', { headers })
-      ]);
-
-      const emailsData = await emailsRes.json();
-      const contactsData = await contactsRes.json();
-      const statsData = await statsRes.json();
-
-      setEmails(emailsData.emails || []);
-      setContacts(contactsData.contacts || []);
-      setStats(statsData);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Filter emails based on search and filter
+  const filteredEmails = emails.filter(email => {
+    const matchesSearch = searchQuery === '' || 
+      email.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      email.sender.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      email.body.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesFilter = 
+      emailFilter === 'all' ||
+      (emailFilter === 'unread' && !email.isRead) ||
+      (emailFilter === 'important' && email.isImportant) ||
+      (emailFilter === 'attachments' && email.hasAttachments);
+    
+    return matchesSearch && matchesFilter;
+  });
 
   const syncEmails = async () => {
     setIsEmailSyncing(true);
-    try {
-      const response = await fetch('/api/email/sync', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ provider: 'gmail' })
-      });
-
-      if (response.ok) {
-        fetchDashboardData();
-      }
-    } catch (error) {
-      console.error('Error syncing emails:', error);
-    } finally {
+    // Simulate sync delay
+    setTimeout(() => {
       setIsEmailSyncing(false);
-    }
+      // You could add new emails here in a real implementation
+    }, 2000);
   };
 
-  const markEmailAsRead = async (emailId) => {
-    try {
-      await fetch(`/api/emails/${emailId}/read`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      setEmails(emails.map(email => 
-        email.id === emailId ? { ...email, isRead: true } : email
-      ));
-    } catch (error) {
-      console.error('Error marking email as read:', error);
-    }
+  const markEmailAsRead = (emailId) => {
+    setEmails(emails.map(email => 
+      email.id === emailId ? { ...email, isRead: true } : email
+    ));
   };
 
   const openEmail = (email) => {
@@ -99,17 +155,17 @@ export default function Dashboard({ user, token, onLogout }) {
     }
   };
 
-  const closeEmail = () => {
-    setSelectedEmail(null);
+  const archiveEmail = (emailId) => {
+    setEmails(emails.filter(email => email.id !== emailId));
+    if (selectedEmail && selectedEmail.id === emailId) {
+      setSelectedEmail(null);
+    }
   };
 
-  const startCompose = () => {
-    setIsComposing(true);
-    setComposeData({ to: '', subject: '', body: '' });
-  };
-
-  const handleComposeChange = (field, value) => {
-    setComposeData(prev => ({ ...prev, [field]: value }));
+  const toggleImportant = (emailId) => {
+    setEmails(emails.map(email => 
+      email.id === emailId ? { ...email, isImportant: !email.isImportant } : email
+    ));
   };
 
   const sendEmail = () => {
@@ -119,18 +175,10 @@ export default function Dashboard({ user, token, onLogout }) {
     setComposeData({ to: '', subject: '', body: '' });
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg">
+      <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg border-r border-gray-200">
         <div className="p-6">
           <div className="flex items-center space-x-2 mb-8">
             <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-2 rounded-lg">
@@ -142,48 +190,87 @@ export default function Dashboard({ user, token, onLogout }) {
           </div>
 
           <nav className="space-y-2">
-            <button
-              onClick={() => setActiveTab('emails')}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                activeTab === 'emails' 
-                  ? 'bg-blue-50 text-blue-600 border-r-2 border-blue-600' 
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <Inbox className="h-5 w-5" />
-              <span>Emails</span>
-              {stats.unreadEmails > 0 && (
-                <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
-                  {stats.unreadEmails}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('contacts')}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                activeTab === 'contacts' 
-                  ? 'bg-blue-50 text-blue-600 border-r-2 border-blue-600' 
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <Users className="h-5 w-5" />
-              <span>Contacts</span>
-              <span className="text-gray-400 text-sm">{stats.contacts || 0}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                activeTab === 'analytics' 
-                  ? 'bg-blue-50 text-blue-600 border-r-2 border-blue-600' 
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <BarChart3 className="h-5 w-5" />
-              <span>Analytics</span>
-            </button>
+            {[
+              { 
+                key: 'emails', 
+                icon: Inbox, 
+                label: 'Inbox', 
+                count: stats.unreadEmails,
+                color: 'blue'
+              },
+              { 
+                key: 'important', 
+                icon: Star, 
+                label: 'Important', 
+                count: stats.importantEmails,
+                color: 'yellow'
+              },
+              { 
+                key: 'contacts', 
+                icon: Users, 
+                label: 'Contacts', 
+                count: stats.contacts,
+                color: 'green'
+              },
+              { 
+                key: 'analytics', 
+                icon: BarChart3, 
+                label: 'Analytics',
+                color: 'purple'
+              },
+              { 
+                key: 'settings', 
+                icon: Settings, 
+                label: 'Settings',
+                color: 'gray'
+              }
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setActiveTab(item.key)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all group ${
+                  activeTab === item.key 
+                    ? `bg-${item.color}-50 text-${item.color}-600 border-r-2 border-${item.color}-600 shadow-sm` 
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <item.icon className="h-5 w-5" />
+                  <span className="font-medium">{item.label}</span>
+                </div>
+                {item.count > 0 && (
+                  <span className={`px-2 py-1 text-xs font-bold rounded-full ${
+                    activeTab === item.key
+                      ? `bg-${item.color}-600 text-white`
+                      : 'bg-gray-200 text-gray-600 group-hover:bg-gray-300'
+                  }`}>
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            ))}
           </nav>
+
+          {/* User Profile Section */}
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                <span className="text-white font-semibold">
+                  {user?.name?.charAt(0).toUpperCase() || 'U'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
+                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+              </div>
+              <button
+                onClick={onLogout}
+                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -193,120 +280,137 @@ export default function Dashboard({ user, token, onLogout }) {
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {activeTab === 'emails' && 'Emails'}
-                {activeTab === 'contacts' && 'Contacts'}
-                {activeTab === 'analytics' && 'Analytics'}
+              <h1 className="text-2xl font-bold text-gray-900 capitalize flex items-center space-x-2">
+                {activeTab === 'emails' && <Inbox className="h-6 w-6 text-blue-600" />}
+                {activeTab === 'important' && <Star className="h-6 w-6 text-yellow-500" />}
+                {activeTab === 'contacts' && <Users className="h-6 w-6 text-green-600" />}
+                {activeTab === 'analytics' && <BarChart3 className="h-6 w-6 text-purple-600" />}
+                {activeTab === 'settings' && <Settings className="h-6 w-6 text-gray-600" />}
+                <span>{activeTab === 'emails' ? 'Inbox' : activeTab}</span>
               </h1>
               <p className="text-gray-600">Welcome back, {user?.name}</p>
             </div>
 
             <div className="flex items-center space-x-4">
-              {activeTab === 'emails' && (
-                <button
-                  onClick={syncEmails}
-                  disabled={isEmailSyncing}
-                  className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`h-4 w-4 ${isEmailSyncing ? 'animate-spin' : ''}`} />
-                  <span>Sync Emails</span>
-                </button>
+              {(activeTab === 'emails' || activeTab === 'important') && (
+                <>
+                  <button
+                    onClick={syncEmails}
+                    disabled={isEmailSyncing}
+                    className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isEmailSyncing ? 'animate-spin' : ''}`} />
+                    <span>{isEmailSyncing ? 'Syncing...' : 'Sync'}</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => setIsComposing(true)}
+                    className="flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-colors shadow-sm"
+                  >
+                    <Send className="h-4 w-4" />
+                    <span>Compose</span>
+                  </button>
+                </>
               )}
-              
-              {activeTab === 'emails' && (
-                <button
-                  onClick={startCompose}
-                  className="flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-colors"
-                >
-                  <Send className="h-4 w-4" />
-                  <span>Compose</span>
-                </button>
-              )}
-
-              <button
-                onClick={onLogout}
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <Settings className="h-5 w-5" />
-              </button>
             </div>
           </div>
         </div>
 
-        {/* Content Area */}
         <div className="p-6">
-          {activeTab === 'emails' && (
+          {(activeTab === 'emails' || activeTab === 'important') && (
             <div>
               {/* Email Stats */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white rounded-lg shadow p-6">
-                  <div className="flex items-center">
-                    <Inbox className="h-8 w-8 text-blue-600" />
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Total Emails</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.emails || 0}</p>
+                {[
+                  { 
+                    label: 'Total Emails', 
+                    value: stats.emails, 
+                    icon: Inbox, 
+                    color: 'blue',
+                    trend: '+12%'
+                  },
+                  { 
+                    label: 'Unread', 
+                    value: stats.unreadEmails, 
+                    icon: Mail, 
+                    color: 'orange',
+                    trend: '-5%'
+                  },
+                  { 
+                    label: 'Important', 
+                    value: stats.importantEmails, 
+                    icon: Star, 
+                    color: 'yellow',
+                    trend: '+2%'
+                  },
+                  { 
+                    label: 'Response Time', 
+                    value: stats.responseTime, 
+                    icon: Clock, 
+                    color: 'green',
+                    trend: '-15%'
+                  }
+                ].map((stat, i) => (
+                  <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">{stat.label}</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
+                        {stat.trend && (
+                          <p className={`text-xs mt-1 flex items-center ${
+                            stat.trend.startsWith('+') ? 'text-green-600' : 
+                            stat.trend.startsWith('-') && stat.label === 'Response Time' ? 'text-green-600' :
+                            'text-red-600'
+                          }`}>
+                            <TrendingUp className="h-3 w-3 mr-1" />
+                            {stat.trend} from last month
+                          </p>
+                        )}
+                      </div>
+                      <div className={`bg-${stat.color}-100 p-3 rounded-lg`}>
+                        <stat.icon className={`h-6 w-6 text-${stat.color}-600`} />
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow p-6">
-                  <div className="flex items-center">
-                    <Mail className="h-8 w-8 text-orange-600" />
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Unread</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.unreadEmails || 0}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow p-6">
-                  <div className="flex items-center">
-                    <Star className="h-8 w-8 text-yellow-600" />
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Important</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.importantEmails || 0}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow p-6">
-                  <div className="flex items-center">
-                    <Clock className="h-8 w-8 text-green-600" />
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Today</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {emails.filter(email => 
-                          new Date(email.receivedAt).toDateString() === new Date().toDateString()
-                        ).length}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
 
               {/* Email List */}
-              <div className="bg-white rounded-lg shadow">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div className="px-6 py-4 border-b border-gray-200">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-medium text-gray-900">Recent Emails</h3>
-                    <div className="flex items-center space-x-2">
+                    <h3 className="text-lg font-medium text-gray-900">
+                      {activeTab === 'important' ? 'Important Emails' : 'Recent Emails'}
+                    </h3>
+                    <div className="flex items-center space-x-3">
                       <div className="relative">
-                        <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                           type="text"
                           placeholder="Search emails..."
-                          className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-10 pr-4 py-2 w-64 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
-                      <button className="p-2 text-gray-400 hover:text-gray-600">
-                        <Filter className="h-4 w-4" />
-                      </button>
+                      <select
+                        value={emailFilter}
+                        onChange={(e) => setEmailFilter(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="all">All</option>
+                        <option value="unread">Unread</option>
+                        <option value="important">Important</option>
+                        <option value="attachments">With Attachments</option>
+                      </select>
                     </div>
                   </div>
                 </div>
 
                 <div className="divide-y divide-gray-200">
-                  {emails.map((email) => (
+                  {filteredEmails
+                    .filter(email => activeTab === 'important' ? email.isImportant : true)
+                    .map((email) => (
                     <div
                       key={email.id}
                       className={`p-6 hover:bg-gray-50 cursor-pointer transition-colors ${
@@ -315,60 +419,75 @@ export default function Dashboard({ user, token, onLogout }) {
                       onClick={() => openEmail(email)}
                     >
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3">
-                            <div className="flex-shrink-0">
-                              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                                {email.sender.name ? email.sender.name[0].toUpperCase() : 'U'}
-                              </div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center space-x-2">
-                                <h4 className={`text-sm font-medium text-gray-900 ${
-                                  !email.isRead ? 'font-semibold' : ''
-                                }`}>
-                                  {email.sender.name || email.sender.email}
-                                </h4>
-                                {email.isImportant && (
-                                  <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                                )}
-                                {!email.isRead && (
-                                  <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                                )}
-                              </div>
-                              <p className={`text-sm text-gray-900 mt-1 ${
-                                !email.isRead ? 'font-medium' : ''
+                        <div className="flex items-start space-x-4 flex-1 min-w-0">
+                          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-white font-semibold text-sm">
+                              {email.sender.name[0].toUpperCase()}
+                            </span>
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <h4 className={`text-sm font-medium text-gray-900 truncate ${
+                                !email.isRead ? 'font-semibold' : ''
                               }`}>
-                                {email.subject}
-                              </p>
-                              <p className="text-sm text-gray-500 mt-1 line-clamp-2">
-                                {email.body.substring(0, 120)}...
-                              </p>
+                                {email.sender.name}
+                              </h4>
+                              {email.isImportant && (
+                                <Star className="h-4 w-4 text-yellow-500 fill-current flex-shrink-0" />
+                              )}
+                              {!email.isRead && (
+                                <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"></div>
+                              )}
+                              {email.hasAttachments && (
+                                <Paperclip className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                              )}
                             </div>
+                            
+                            <p className={`text-sm text-gray-900 mb-1 truncate ${
+                              !email.isRead ? 'font-medium' : ''
+                            }`}>
+                              {email.subject}
+                            </p>
+                            
+                            <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">
+                              {email.body.substring(0, 120)}...
+                            </p>
+                            
+                            {email.labels && email.labels.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {email.labels.map((label, i) => (
+                                  <span key={i} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {label}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="flex-shrink-0 ml-4 flex flex-col items-end space-y-2">
+                        
+                        <div className="flex flex-col items-end space-y-2 flex-shrink-0 ml-4">
                           <p className="text-sm text-gray-500">
                             {new Date(email.receivedAt).toLocaleDateString()}
                           </p>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-1">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // Archive email
+                                toggleImportant(email.id);
                               }}
-                              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                              className="p-1 text-gray-400 hover:text-yellow-500 transition-colors"
                             >
-                              <Archive className="h-4 w-4" />
+                              <Star className={`h-4 w-4 ${email.isImportant ? 'text-yellow-500 fill-current' : ''}`} />
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // Delete email
+                                archiveEmail(email.id);
                               }}
-                              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
                             >
-                              <Trash className="h-4 w-4" />
+                              <Archive className="h-4 w-4" />
                             </button>
                           </div>
                         </div>
@@ -376,19 +495,26 @@ export default function Dashboard({ user, token, onLogout }) {
                     </div>
                   ))}
 
-                  {emails.length === 0 && (
+                  {filteredEmails.length === 0 && (
                     <div className="p-12 text-center">
                       <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No emails yet</h3>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        {searchQuery ? 'No emails found' : 'No emails yet'}
+                      </h3>
                       <p className="text-gray-500 mb-6">
-                        Click "Sync Emails" to get started with your email integration.
+                        {searchQuery 
+                          ? 'Try adjusting your search terms or filters.' 
+                          : 'Click "Sync" to get started with your email integration.'
+                        }
                       </p>
-                      <button
-                        onClick={syncEmails}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Sync Your Emails
-                      </button>
+                      {!searchQuery && (
+                        <button
+                          onClick={syncEmails}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          Sync Your Emails
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -406,12 +532,15 @@ export default function Dashboard({ user, token, onLogout }) {
                     <input
                       type="text"
                       placeholder="Search contacts..."
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="pl-10 pr-4 py-2 w-64 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                  <button className="p-2 text-gray-400 hover:text-gray-600">
-                    <Filter className="h-4 w-4" />
-                  </button>
+                  <select className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option>All Contacts</option>
+                    <option>Leads</option>
+                    <option>Team</option>
+                    <option>Recently Added</option>
+                  </select>
                 </div>
                 <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
                   <Plus className="h-4 w-4" />
@@ -422,31 +551,57 @@ export default function Dashboard({ user, token, onLogout }) {
               {/* Contacts Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {contacts.map((contact) => (
-                  <div key={contact._id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                    <div className="flex items-center space-x-3 mb-4">
-                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                        {contact.name[0].toUpperCase()}
+                  <div key={contact._id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                          <span className="text-white font-semibold text-lg">
+                            {contact.name[0].toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">{contact.name}</h3>
+                          <p className="text-sm text-gray-500">{contact.company}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{contact.name}</h3>
-                        <p className="text-sm text-gray-500">{contact.company}</p>
-                      </div>
+                      {contact.isLead && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          Lead
+                        </span>
+                      )}
                     </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-gray-600">{contact.email}</p>
+                    
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center space-x-2 text-sm text-gray-600">
+                        <Mail className="h-4 w-4" />
+                        <span>{contact.email}</span>
+                      </div>
                       {contact.phone && (
-                        <p className="text-sm text-gray-600">{contact.phone}</p>
+                        <div className="flex items-center space-x-2 text-sm text-gray-600">
+                          <Phone className="h-4 w-4" />
+                          <span>{contact.phone}</span>
+                        </div>
                       )}
-                      {contact.notes && (
-                        <p className="text-sm text-gray-500 italic">{contact.notes}</p>
+                      {contact.lastContactedAt && (
+                        <div className="flex items-center space-x-2 text-sm text-gray-500">
+                          <Clock className="h-4 w-4" />
+                          <span>Last contacted {new Date(contact.lastContactedAt).toLocaleDateString()}</span>
+                        </div>
                       )}
                     </div>
+                    
+                    {contact.notes && (
+                      <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                        {contact.notes}
+                      </p>
+                    )}
+                    
                     {contact.tags && contact.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-3">
+                      <div className="flex flex-wrap gap-1">
                         {contact.tags.map((tag, index) => (
                           <span
                             key={index}
-                            className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                            className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium"
                           >
                             {tag}
                           </span>
@@ -456,86 +611,94 @@ export default function Dashboard({ user, token, onLogout }) {
                   </div>
                 ))}
               </div>
-
-              {contacts.length === 0 && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-                  <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No contacts yet</h3>
-                  <p className="text-gray-500 mb-6">
-                    Start by syncing your emails or adding contacts manually.
-                  </p>
-                  <div className="flex justify-center space-x-4">
-                    <button
-                      onClick={syncEmails}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      Sync Emails
-                    </button>
-                    <button className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-                      Add Contact
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
           {activeTab === 'analytics' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Email Activity</h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Emails received today</span>
-                    <span className="font-semibold text-gray-900">
-                      {emails.filter(email => 
-                        new Date(email.receivedAt).toDateString() === new Date().toDateString()
-                      ).length}
-                    </span>
+            <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                {[
+                  {
+                    title: "Email Activity",
+                    icon: Activity,
+                    color: "blue",
+                    stats: [
+                      { label: "Emails sent today", value: "24" },
+                      { label: "Response rate", value: "87%", trend: "+5%" },
+                      { label: "Avg response time", value: "1.2h", trend: "-15%" }
+                    ]
+                  },
+                  {
+                    title: "Productivity",
+                    icon: TrendingUp,
+                    color: "green",
+                    stats: [
+                      { label: "Emails processed", value: "247" },
+                      { label: "Time saved", value: "4.2h", trend: "+12%" },
+                      { label: "Efficiency", value: "+34%", trend: "+8%" }
+                    ]
+                  },
+                  {
+                    title: "Contact Growth",
+                    icon: Users,
+                    color: "purple",
+                    stats: [
+                      { label: "Total contacts", value: stats.contacts.toString() },
+                      { label: "New this week", value: "12", trend: "+25%" },
+                      { label: "Active leads", value: "5", trend: "+2" }
+                    ]
+                  }
+                ].map((section, i) => (
+                  <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center space-x-3 mb-6">
+                      <div className={`bg-${section.color}-100 p-2 rounded-lg`}>
+                        <section.icon className={`h-5 w-5 text-${section.color}-600`} />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900">{section.title}</h3>
+                    </div>
+                    <div className="space-y-4">
+                      {section.stats.map((stat, j) => (
+                        <div key={j} className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">{stat.label}</span>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-semibold text-gray-900">{stat.value}</span>
+                            {stat.trend && (
+                              <span className={`text-xs ${
+                                stat.trend.startsWith('+') ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {stat.trend}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Response rate</span>
-                    <span className="font-semibold text-green-600">87%</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Avg response time</span>
-                    <span className="font-semibold text-gray-900">2.4h</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-6">Account Settings</h3>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email Accounts</label>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-600">Manage your connected email accounts and sync settings.</p>
+                    <button className="mt-2 text-sm text-blue-600 hover:text-blue-700">
+                      Configure Email Sync
+                    </button>
                   </div>
                 </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Growth</h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Total contacts</span>
-                    <span className="font-semibold text-gray-900">{stats.contacts || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">New this week</span>
-                    <span className="font-semibold text-green-600">+12</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Active leads</span>
-                    <span className="font-semibold text-blue-600">5</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance</h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Email open rate</span>
-                    <span className="font-semibold text-green-600">94%</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Click rate</span>
-                    <span className="font-semibold text-blue-600">23%</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Conversion rate</span>
-                    <span className="font-semibold text-purple-600">12%</span>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notifications</label>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-600">Control when and how you receive notifications.</p>
+                    <button className="mt-2 text-sm text-blue-600 hover:text-blue-700">
+                      Notification Preferences
+                    </button>
                   </div>
                 </div>
               </div>
@@ -548,16 +711,15 @@ export default function Dashboard({ user, token, onLogout }) {
       {selectedEmail && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            {/* Email Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                  {selectedEmail.sender.name ? selectedEmail.sender.name[0].toUpperCase() : 'U'}
+                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                  <span className="text-white font-semibold">
+                    {selectedEmail.sender.name[0].toUpperCase()}
+                  </span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {selectedEmail.sender.name || selectedEmail.sender.email}
-                  </h3>
+                  <h3 className="text-lg font-semibold text-gray-900">{selectedEmail.sender.name}</h3>
                   <p className="text-sm text-gray-500">{selectedEmail.sender.email}</p>
                 </div>
               </div>
@@ -568,33 +730,39 @@ export default function Dashboard({ user, token, onLogout }) {
                 <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
                   <Forward className="h-5 w-5" />
                 </button>
-                <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                  <Archive className="h-5 w-5" />
+                <button 
+                  onClick={() => toggleImportant(selectedEmail.id)}
+                  className="p-2 text-gray-400 hover:text-yellow-500 transition-colors"
+                >
+                  <Star className={`h-5 w-5 ${selectedEmail.isImportant ? 'text-yellow-500 fill-current' : ''}`} />
                 </button>
-                <button className="p-2 text-gray-400 hover:text-red-600 transition-colors">
-                  <Trash className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={closeEmail}
+                <button 
+                  onClick={() => archiveEmail(selectedEmail.id)}
                   className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
+                  <Archive className="h-5 w-5" />
+                </button>
+                <button onClick={() => setSelectedEmail(null)} className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
                   <X className="h-5 w-5" />
                 </button>
               </div>
             </div>
 
-            {/* Email Content */}
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  {selectedEmail.subject}
-                </h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedEmail.subject}</h2>
                 <div className="flex items-center space-x-4 text-sm text-gray-500">
                   <span>{new Date(selectedEmail.receivedAt).toLocaleString()}</span>
                   {selectedEmail.isImportant && (
                     <div className="flex items-center space-x-1">
                       <Star className="h-4 w-4 text-yellow-500 fill-current" />
                       <span>Important</span>
+                    </div>
+                  )}
+                  {selectedEmail.hasAttachments && (
+                    <div className="flex items-center space-x-1">
+                      <Paperclip className="h-4 w-4 text-gray-400" />
+                      <span>Has attachments</span>
                     </div>
                   )}
                 </div>
@@ -607,7 +775,6 @@ export default function Dashboard({ user, token, onLogout }) {
               </div>
             </div>
 
-            {/* Quick Actions */}
             <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
               <div className="flex items-center space-x-4">
                 <button className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
@@ -636,51 +803,43 @@ export default function Dashboard({ user, token, onLogout }) {
       {isComposing && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
-            {/* Compose Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">New Message</h3>
-              <button
-                onClick={() => setIsComposing(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
+              <button onClick={() => setIsComposing(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
                 <X className="h-6 w-6" />
               </button>
             </div>
 
-            {/* Compose Form */}
             <div className="p-6 space-y-4">
               <div>
                 <input
                   type="email"
                   placeholder="To"
                   value={composeData.to}
-                  onChange={(e) => handleComposeChange('to', e.target.value)}
+                  onChange={(e) => setComposeData({...composeData, to: e.target.value})}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-              
               <div>
                 <input
                   type="text"
                   placeholder="Subject"
                   value={composeData.subject}
-                  onChange={(e) => handleComposeChange('subject', e.target.value)}
+                  onChange={(e) => setComposeData({...composeData, subject: e.target.value})}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-              
               <div>
                 <textarea
                   placeholder="Write your message..."
                   rows={12}
                   value={composeData.body}
-                  onChange={(e) => handleComposeChange('body', e.target.value)}
+                  onChange={(e) => setComposeData({...composeData, body: e.target.value})}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 />
               </div>
             </div>
 
-            {/* Compose Actions */}
             <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
               <div className="flex items-center space-x-4">
                 <button

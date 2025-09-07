@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, User, Building } from 'lucide-react';
+import { X, Mail, Lock, User, Building, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { validateEmail, validatePassword, validateName, setAuthToken, setUserData } from '../utils/auth';
 
 export default function AuthModal({ isOpen, onClose, onAuth }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -11,19 +12,54 @@ export default function AuthModal({ isOpen, onClose, onAuth }) {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   if (!isOpen) return null;
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
     setError('');
+    
+    // Clear field-specific errors
+    if (fieldErrors[name]) {
+      setFieldErrors({
+        ...fieldErrors,
+        [name]: ''
+      });
+    }
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!isLogin && !validateName(formData.name)) {
+      errors.name = 'Name must be at least 2 characters';
+    }
+    
+    if (!validateEmail(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    
+    if (!validatePassword(formData.password)) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+    
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+    
     setIsLoading(true);
     setError('');
 
@@ -40,13 +76,18 @@ export default function AuthModal({ isOpen, onClose, onAuth }) {
       const data = await response.json();
 
       if (response.ok) {
-        localStorage.setItem('token', data.token);
+        setAuthToken(data.token);
+        setUserData(data.user);
         onAuth(data.user, data.token);
         onClose();
+        
+        // Reset form
+        setFormData({ name: '', email: '', password: '', company: '' });
       } else {
         setError(data.error || 'Authentication failed');
       }
     } catch (error) {
+      console.error('Auth error:', error);
       setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
@@ -56,6 +97,7 @@ export default function AuthModal({ isOpen, onClose, onAuth }) {
   const toggleMode = () => {
     setIsLogin(!isLogin);
     setError('');
+    setFieldErrors({});
     setFormData({ name: '', email: '', password: '', company: '' });
   };
 
@@ -76,7 +118,9 @@ export default function AuthModal({ isOpen, onClose, onAuth }) {
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-center space-x-2">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>{error}</span>
               {error}
             </div>
           )}
@@ -96,10 +140,18 @@ export default function AuthModal({ isOpen, onClose, onAuth }) {
                     required
                     value={formData.name}
                     onChange={handleChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                      fieldErrors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    }`}
                     placeholder="Enter your full name"
                   />
                 </div>
+                {fieldErrors.name && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center space-x-1">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>{fieldErrors.name}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -135,10 +187,18 @@ export default function AuthModal({ isOpen, onClose, onAuth }) {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                  fieldErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
                 placeholder="Enter your email"
               />
             </div>
+            {fieldErrors.email && (
+              <p className="mt-1 text-sm text-red-600 flex items-center space-x-1">
+                <AlertCircle className="h-3 w-3" />
+                <span>{fieldErrors.email}</span>
+              </p>
+            )}
           </div>
 
           <div>
@@ -148,17 +208,37 @@ export default function AuthModal({ isOpen, onClose, onAuth }) {
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 id="password"
                 name="password"
                 required
                 value={formData.password}
                 onChange={handleChange}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                  fieldErrors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
                 placeholder={isLogin ? "Enter your password" : "Create a password"}
                 minLength={6}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
             </div>
+            {fieldErrors.password && (
+              <p className="mt-1 text-sm text-red-600 flex items-center space-x-1">
+                <AlertCircle className="h-3 w-3" />
+                <span>{fieldErrors.password}</span>
+              </p>
+            )}
+            {!isLogin && (
+              <p className="mt-1 text-xs text-gray-500">
+                Password must be at least 6 characters long
+              </p>
+            )}
           </div>
 
           <button
@@ -168,6 +248,12 @@ export default function AuthModal({ isOpen, onClose, onAuth }) {
           >
             {isLoading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
           </button>
+
+          {!isLogin && (
+            <p className="text-xs text-gray-500 text-center">
+              By creating an account, you agree to our Terms of Service and Privacy Policy
+            </p>
+          )}
         </form>
 
         <div className="px-6 pb-6">

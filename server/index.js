@@ -1,36 +1,38 @@
-import express from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import dotenv from 'dotenv';
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const dotenv = require('dotenv');
 
-// Load environment variables (with custom config to reduce noise)
-const envResult = dotenv.config();
-if (envResult.error) {
-  console.warn('⚠️ No .env file found, using default values');
-} else {
-  console.log('✅ Environment variables loaded from .env');
-}
+// Load environment variables from .env file
+dotenv.config();  
 
-// Initialize Express app
+// Models
+const User = require('./models/User');
+const Contact = require('./models/Contact');
+const Email = require('./models/Email');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/superhuman-clone';
+const JWT_SECRET = process.env.JWT_SECRET || 'supersync';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/supersync';
 
 // Middleware
 app.use(helmet());
 app.use(morgan('combined'));
-app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Error handling middleware for JSON parsing
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON format' });
+  }
+  next();
+});
 
 // Database connection
 mongoose.connect(MONGODB_URI, {
@@ -40,55 +42,20 @@ mongoose.connect(MONGODB_URI, {
 .then(() => console.log('Connected to MongoDB'))
 .catch(err => console.error('MongoDB connection error:', err));
 
-// Mongoose Schemas (inline for simplicity)
-const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  name: { type: String, required: true },
-  company: { type: String, default: '' },
-  isEmailSynced: { type: Boolean, default: false },
-  lastEmailSync: { type: Date },
-  emailProvider: { type: String }
-}, { timestamps: true });
+// Database connection event handlers
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
+});
 
-const contactSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  name: { type: String, required: true },
-  email: { type: String, required: true },
-  company: { type: String, default: '' },
-  phone: { type: String, default: '' },
-  notes: { type: String, default: '' },
-  tags: [{ type: String }],
-  isLead: { type: Boolean, default: false },
-  leadSource: { type: String }
-}, { timestamps: true });
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected');
+});
 
-const emailSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  messageId: { type: String, required: true, unique: true },
-  subject: { type: String, required: true },
-  sender: {
-    name: String,
-    email: String
-  },
-  recipients: [{
-    name: String,
-    email: String
-  }],
-  body: { type: String, required: true },
-  isRead: { type: Boolean, default: false },
-  isImportant: { type: Boolean, default: false },
-  labels: [{ type: String }],
-  receivedAt: { type: Date, default: Date.now }
-}, { timestamps: true });
+mongoose.connection.on('reconnected', () => {
+  console.log('MongoDB reconnected');
+});
 
-// Models
-const User = mongoose.model('User', userSchema);
-const Contact = mongoose.model('Contact', contactSchema);
-const Email = mongoose.model('Email', emailSchema);
-
-// Remove database check middleware - it was causing the error
-// app.use('/api', checkDBConnection); // REMOVED THIS LINE
+// Auth middleware
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -99,61 +66,57 @@ const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Verify user still exists
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
     req.user = decoded;
     next();
   } catch (error) {
+    console.error('Token verification error:', error);
     return res.status(403).json({ error: 'Invalid token' });
   }
 };
 
+// Input validation middleware
+const validateRegistration = (req, res, next) => {
+  const { email, password, name } = req.body;
+  
+  if (!email || !password || !name) {
+    return res.status(400).json({ error: 'Email, password, and name are required' });
+  }
+  
+  // Email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+  
+  // Password validation
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+  }
+  
+  // Name validation
+  if (name.trim().length < 2) {
+    return res.status(400).json({ error: 'Name must be at least 2 characters long' });
+  }
+  
+  next();
+};
+
 // Routes
 
-// Test endpoint - ADD THIS RIGHT AFTER THE ROOT ROUTE
-app.post('/api/test', (req, res) => {
-  console.log('🧪 TEST ENDPOINT HIT!');
-  console.log('📥 Request body:', req.body);
-  console.log('🌐 Request headers:', req.headers);
-  res.json({ 
-    message: 'Test endpoint working!', 
-    receivedData: req.body,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Root route
-app.get('/', (req, res) => {
-  res.json({
-    message: 'SuperSync API Server',
-    status: 'running',
-    version: '1.0.0',
-    endpoints: {
-      health: '/api/health',
-      auth: {
-        register: 'POST /api/auth/register',
-        login: 'POST /api/auth/login',
-        profile: 'GET /api/auth/profile'
-      },
-      contacts: 'GET|POST|PUT|DELETE /api/contacts',
-      emails: 'GET /api/emails',
-      sync: 'POST /api/email/sync',
-      stats: 'GET /api/dashboard/stats'
-    }
-  });
-});
-
 // User Registration
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', validateRegistration, async (req, res) => {
   try {
-    console.log('Registration attempt:', { email: req.body.email, name: req.body.name });
-    
     const { email, password, name, company } = req.body;
 
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Email, password, and name are required' });
-    }
-
     // Check if user exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
     }
@@ -164,14 +127,13 @@ app.post('/api/auth/register', async (req, res) => {
 
     // Create user
     const newUser = new User({
-      email,
-      name,
+      email: email.toLowerCase(),
+      name: name.trim(),
       company: company || '',
       password: hashedPassword
     });
 
     await newUser.save();
-    console.log('User created successfully:', newUser._id);
 
     // Generate token
     const token = jwt.sign(
@@ -192,22 +154,26 @@ app.post('/api/auth/register', async (req, res) => {
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error: ' + error.message });
+    
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+    
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // User Login
 app.post('/api/auth/login', async (req, res) => {
   try {
-    console.log('Login attempt:', { email: req.body.email });
-    
     const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
@@ -218,14 +184,16 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
     // Generate token
     const token = jwt.sign(
       { id: user._id, email: user.email },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
-
-    console.log('Login successful for:', user.email);
 
     res.json({
       message: 'Login successful',
@@ -235,12 +203,13 @@ app.post('/api/auth/login', async (req, res) => {
         email: user.email,
         name: user.name,
         company: user.company,
-        isEmailSynced: user.isEmailSynced
+        isEmailSynced: user.isEmailSynced,
+        lastLogin: user.lastLogin
       }
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error: ' + error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -259,7 +228,9 @@ app.get('/api/auth/profile', authenticateToken, async (req, res) => {
         name: user.name,
         company: user.company,
         isEmailSynced: user.isEmailSynced,
-        lastEmailSync: user.lastEmailSync
+        lastEmailSync: user.lastEmailSync,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin
       }
     });
   } catch (error) {
@@ -268,12 +239,78 @@ app.get('/api/auth/profile', authenticateToken, async (req, res) => {
   }
 });
 
+// Update user profile
+app.put('/api/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    const { name, company } = req.body;
+    
+    const updateData = {};
+    if (name && name.trim().length >= 2) {
+      updateData.name = name.trim();
+    }
+    if (company !== undefined) {
+      updateData.company = company.trim();
+    }
+    
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      updateData,
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        company: user.company,
+        isEmailSynced: user.isEmailSynced,
+        lastEmailSync: user.lastEmailSync
+      }
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Contacts API
 app.get('/api/contacts', authenticateToken, async (req, res) => {
   try {
-    const contacts = await Contact.find({ userId: req.user.id })
-      .sort({ createdAt: -1 });
-    res.json({ contacts });
+    const { search, limit = 50, offset = 0 } = req.query;
+    
+    let query = { userId: req.user.id };
+    
+    // Add search functionality
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { company: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    const contacts = await Contact.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(offset));
+      
+    const total = await Contact.countDocuments(query);
+    
+    res.json({ 
+      contacts,
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: total > parseInt(offset) + parseInt(limit)
+      }
+    });
   } catch (error) {
     console.error('Get contacts error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -288,10 +325,26 @@ app.post('/api/contacts', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Name and email are required' });
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Check for duplicate contact
+    const existingContact = await Contact.findOne({
+      userId: req.user.id,
+      email: email.toLowerCase()
+    });
+    
+    if (existingContact) {
+      return res.status(400).json({ error: 'Contact with this email already exists' });
+    }
+
     const newContact = new Contact({
       userId: req.user.id,
-      name,
-      email,
+      name: name.trim(),
+      email: email.toLowerCase(),
       company: company || '',
       phone: phone || '',
       notes: notes || '',
@@ -315,16 +368,29 @@ app.put('/api/contacts/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { name, email, company, phone, notes, tags } = req.body;
 
+    // Validate input
+    if (name && name.trim().length < 2) {
+      return res.status(400).json({ error: 'Name must be at least 2 characters long' });
+    }
+    
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+    }
+
+    const updateData = {};
+    if (name) updateData.name = name.trim();
+    if (email) updateData.email = email.toLowerCase();
+    if (company !== undefined) updateData.company = company;
+    if (phone !== undefined) updateData.phone = phone;
+    if (notes !== undefined) updateData.notes = notes;
+    if (tags !== undefined) updateData.tags = tags;
+
     const contact = await Contact.findOneAndUpdate(
       { _id: id, userId: req.user.id },
-      {
-        name: name,
-        email: email,
-        company: company || '',
-        phone: phone || '',
-        notes: notes || '',
-        tags: tags || []
-      },
+      updateData,
       { new: true }
     );
 
@@ -362,7 +428,12 @@ app.delete('/api/contacts/:id', authenticateToken, async (req, res) => {
 app.post('/api/email/sync', authenticateToken, async (req, res) => {
   try {
     const { provider } = req.body;
+
+    // Check if user exists
     const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     // Simulate email sync by creating demo emails
     const demoEmails = [
@@ -376,9 +447,9 @@ app.post('/api/email/sync', authenticateToken, async (req, res) => {
         },
         recipients: [{
           name: user.name || 'User',
-          email: user.email
+          email: req.user.email
         }],
-        body: `Hi there!\n\nWelcome to SuperSync! We're excited to have you on board. Your email integration has been successfully set up and you can now start managing your contacts and emails in one place.\n\nHere's what you can do:\n- Sync contacts from your email\n- Manage leads and prospects\n- Track email conversations\n- Organize your network\n\nIf you have any questions, just reply to this email.\n\nBest regards,\nThe SuperSync Team`,
+        body: `Hi ${user.name || 'there'}!\n\nWelcome to SuperSync! We're excited to have you on board. Your email integration has been successfully set up and you can now start managing your contacts and emails in one place.\n\nHere's what you can do:\n- Sync contacts from your email\n- Manage leads and prospects\n- Track email conversations\n- Organize your network\n\nIf you have any questions, just reply to this email.\n\nBest regards,\nThe SuperSync Team`,
         isRead: false,
         isImportant: true,
         labels: ['welcome', 'setup'],
@@ -394,7 +465,7 @@ app.post('/api/email/sync', authenticateToken, async (req, res) => {
         },
         recipients: [{
           name: user.name || 'User',
-          email: user.email
+          email: req.user.email
         }],
         body: `Hi ${user.name || 'there'},\n\nYour contact sync is in progress. We're importing your contacts from ${provider || 'your email provider'} and organizing them for you.\n\nThis process usually takes a few minutes. You'll receive a notification once it's complete.\n\nIn the meantime, you can start exploring the dashboard and adding new contacts manually.\n\nThanks for choosing SuperSync!\n\nBest,\nSupport Team`,
         isRead: false,
@@ -411,7 +482,7 @@ app.post('/api/email/sync', authenticateToken, async (req, res) => {
         },
         recipients: [{
           name: user.name || 'User',
-          email: user.email
+          email: req.user.email
         }],
         body: `A new lead has submitted your contact form:\n\nName: John Smith\nCompany: TechCorp Inc.\nEmail: john.smith@techcorp.com\nMessage: "Interested in learning more about your email management solution for our team of 50+ people."\n\nThis lead has been automatically added to your contacts. You can follow up directly from your dashboard.\n\nDon't let this opportunity slip away!`,
         isRead: false,
@@ -421,11 +492,17 @@ app.post('/api/email/sync', authenticateToken, async (req, res) => {
       }
     ];
 
+    // Remove existing demo emails for this user to avoid duplicates
+    await Email.deleteMany({ 
+      userId: req.user.id,
+      messageId: { $regex: /^demo-/ }
+    });
+
     // Save emails to database
     await Email.insertMany(demoEmails);
 
     // Update user sync status
-    await User.findByIdAndUpdate(req.user.id, {
+    await User.findByIdAndUpdate(user._id, {
       isEmailSynced: true,
       lastEmailSync: new Date(),
       emailProvider: provider || 'gmail'
@@ -452,9 +529,24 @@ app.post('/api/email/sync', authenticateToken, async (req, res) => {
 
 app.get('/api/emails', authenticateToken, async (req, res) => {
   try {
-    const emails = await Email.find({ userId: req.user.id })
+    const { limit = 50, offset = 0, unread, important } = req.query;
+    
+    let query = { userId: req.user.id };
+    
+    // Filter options
+    if (unread === 'true') {
+      query.isRead = false;
+    }
+    if (important === 'true') {
+      query.isImportant = true;
+    }
+    
+    const emails = await Email.find(query)
       .sort({ receivedAt: -1 })
-      .limit(50);
+      .limit(parseInt(limit))
+      .skip(parseInt(offset));
+      
+    const total = await Email.countDocuments(query);
 
     res.json({ 
       emails: emails.map(email => ({
@@ -468,7 +560,13 @@ app.get('/api/emails', authenticateToken, async (req, res) => {
         isImportant: email.isImportant,
         labels: email.labels,
         receivedAt: email.receivedAt
-      }))
+      })),
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: total > parseInt(offset) + parseInt(limit)
+      }
     });
   } catch (error) {
     console.error('Get emails error:', error);
@@ -496,6 +594,35 @@ app.put('/api/emails/:id/read', authenticateToken, async (req, res) => {
   }
 });
 
+// Mark email as important
+app.put('/api/emails/:id/important', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { important } = req.body;
+    
+    const email = await Email.findOneAndUpdate(
+      { _id: id, userId: req.user.id },
+      { isImportant: Boolean(important) },
+      { new: true }
+    );
+
+    if (!email) {
+      return res.status(404).json({ error: 'Email not found' });
+    }
+
+    res.json({ 
+      message: `Email marked as ${important ? 'important' : 'not important'}`,
+      email: {
+        id: email._id,
+        isImportant: email.isImportant
+      }
+    });
+  } catch (error) {
+    console.error('Mark email as important error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Contact sales lead submission
 app.post('/api/contact-sales', async (req, res) => {
   try {
@@ -505,11 +632,17 @@ app.post('/api/contact-sales', async (req, res) => {
       return res.status(400).json({ error: 'Name, email, and company are required' });
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
     const newLead = new Contact({
       userId: null, // Sales leads don't belong to a specific user
-      name,
-      email,
-      company,
+      name: name.trim(),
+      email: email.toLowerCase(),
+      company: company.trim(),
       phone: phone || '',
       notes: `Sales lead: ${message || 'No message provided'}. Team size: ${teamSize || 'Not specified'}`,
       isLead: true,
@@ -532,22 +665,32 @@ app.post('/api/contact-sales', async (req, res) => {
 // Dashboard stats
 app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
   try {
-    const contactsCount = await Contact.countDocuments({ userId: req.user.id });
-    const emailsCount = await Email.countDocuments({ userId: req.user.id });
-    const unreadEmailsCount = await Email.countDocuments({ 
-      userId: req.user.id, 
-      isRead: false 
-    });
-    const importantEmailsCount = await Email.countDocuments({ 
-      userId: req.user.id, 
-      isImportant: true 
-    });
+    const [
+      contactsCount,
+      emailsCount,
+      unreadEmailsCount,
+      importantEmailsCount,
+      todayEmailsCount
+    ] = await Promise.all([
+      Contact.countDocuments({ userId: req.user.id }),
+      Email.countDocuments({ userId: req.user.id }),
+      Email.countDocuments({ userId: req.user.id, isRead: false }),
+      Email.countDocuments({ userId: req.user.id, isImportant: true }),
+      Email.countDocuments({ 
+        userId: req.user.id,
+        receivedAt: {
+          $gte: new Date(new Date().setHours(0, 0, 0, 0)),
+          $lt: new Date(new Date().setHours(23, 59, 59, 999))
+        }
+      })
+    ]);
 
     res.json({
       contacts: contactsCount,
       emails: emailsCount,
       unreadEmails: unreadEmailsCount,
-      importantEmails: importantEmailsCount
+      importantEmails: importantEmailsCount,
+      todayEmails: todayEmailsCount
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
@@ -560,24 +703,42 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
   });
+});
+
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+  
+  // Don't leak error details in production
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  res.status(err.status || 500).json({ 
+    error: isDevelopment ? err.message : 'Internal server error',
+    ...(isDevelopment && { stack: err.stack })
+  });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  mongoose.connection.close(() => {
+    console.log('MongoDB connection closed');
+    process.exit(0);
+  });
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/api/health`);
-  console.log(`API Documentation: http://localhost:${PORT}/`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });

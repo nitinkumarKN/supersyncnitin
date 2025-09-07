@@ -61,4 +61,10 @@ const emailSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Indexes for better performance
+emailSchema.index({ userId: 1, receivedAt: -1 });
+emailSchema.index({ userId: 1, isRead: 1 });
+emailSchema.index({ userId: 1, isImportant: 1 });
+emailSchema.index({ messageId: 1 }, { unique: true });
+
 module.exports = mongoose.model('Email', emailSchema);
